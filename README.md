@@ -1,7 +1,9 @@
 # OpenPGP Long Key ID Collider
 
 Uses hash chains to find pairs of keys that have "long" 64-bit key ID
-collisions. Overview: [**The Long Key ID Collider**][long]
+collisions.
+
+Overview: [**The Long Key ID Collider**][long]
 
 ## Installation
 
@@ -9,21 +11,21 @@ collisions. Overview: [**The Long Key ID Collider**][long]
 
 ## Usage:
 
-(*Quickstart*) This command will find and output two ASCII-armored
-secret keys whose long key IDs collide:
+*Quickstart*: This command will find and output two ASCII-armored
+private keys whose long key IDs collide:
 
-    $ pgpcollider --verbose
+    $ pgpcollider --verbose | tee keys.asc
 
 It will use all your CPU cores (see `GOMAXPROCS`) and, on a modern
 computer, can take up to a day to find a collision. A collision is
-expected after around 4 billion keys (try `--verbose`), but could happen
-sooner or later.
+expected after around 4 billion keys (monitor with `--verbose`), but
+could happen sooner or later.
 
-Additional computers can work together to search for a collision. To
-enable, pass additional arguments just for `--collide` (`-X`). One
+Additional computers can work together to search for a collision. One
 instance is a server that distributes tasks, but does none of its own
 work. Client instances join and compute hash chains on behalf of the
-server. Clients are free to come and go at any time.
+server. These clients are free to come and go at any time without
+disrupting overall progress.
 
 Start a server with `--server` (`-S`) listening on port 1234:
 
