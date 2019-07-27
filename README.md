@@ -9,7 +9,7 @@ Overview: [**The Long Key ID Collider**][long]
 
     $ go get -u github.com/skeeto/pgpcollider
 
-## Usage:
+## Usage
 
 *Quickstart*: This command will find and output two ASCII-armored
 private keys whose long key IDs collide:
@@ -35,5 +35,10 @@ Start one or more clients with `--client` (`-C`):
 
     $ pgpcollider -C hostname:1234
 
+## See Also
+
+* [passphrase2pgp][p2p]
+
 
 [long]: https://nullprogram.com/blog/2019/07/22/
+[p2p]: https://github.com/skeeto/passphrase2pgp
