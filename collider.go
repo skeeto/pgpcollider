@@ -6,23 +6,40 @@ import (
 	"encoding/binary"
 	"fmt"
 	"io"
+	"io/ioutil"
 	"log"
 	"net"
 	"os"
 	"runtime"
+	"strconv"
 	"time"
 
 	"github.com/skeeto/optparse-go"
 	"github.com/skeeto/passphrase2pgp/openpgp"
 )
 
-// mask selects the bits to be collided.
-const mask = (1 << 64) - 1
+const (
+	// mask selects the bits to be collided.
+	mask = (1 << 64) - 1
 
-// distingish is a mask that determintes the average hash chain length.
-// A chain ends when these bits are all zero. This sets the trade-off
-// between computation time and memory use.
-const distinguish = (1 << 17) - 1
+	// distingish is a mask that determintes the average hash chain length.
+	// A chain ends when these bits are all zero. This sets the trade-off
+	// between computation time and memory use.
+	distinguish = (1 << 17) - 1
+
+	cmdDefault = iota
+	cmdClient
+	cmdServer
+)
+
+// Print the message like fmt.Printf() and then os.Exit(1).
+func fatal(format string, args ...interface{}) {
+	buf := bytes.NewBufferString("pgpcollider: ")
+	fmt.Fprintf(buf, format, args...)
+	buf.WriteRune('\n')
+	os.Stderr.Write(buf.Bytes())
+	os.Exit(1)
+}
 
 // expand fills a 32-byte key seed from a 64-bit PRNG seed.
 func expand(kseed []byte, seed uint64) {
@@ -98,11 +115,9 @@ func consumer(chains <-chan chain, config *config) {
 
 	for chain := range chains {
 		total += int64(chain.length)
-		if config.verbose {
-			rate := mean.add(float64(total))
-			fmt.Fprintf(os.Stderr, "chains %d, keys %d, keys/sec %.0f\n",
-				len(seen)+1, total, rate)
-		}
+		rate := mean.add(float64(total))
+		log.Printf("chains %d, keys %d, keys/sec %.0f\n",
+			len(seen)+1, total, rate)
 
 		if seed, ok := seen[chain.truncID]; ok {
 			// Recreate chains, but record all the links this time.
@@ -122,10 +137,8 @@ func consumer(chains <-chan chain, config *config) {
 				}
 				seedA := link.seed
 
-				if config.verbose {
-					duration := time.Now().Sub(start)
-					fmt.Fprintf(os.Stderr, "duration %s\n", duration)
-				}
+				duration := time.Now().Sub(start)
+				log.Printf("duration %s\n", duration)
 
 				var buf bytes.Buffer
 				userid := openpgp.UserID{ID: []byte(config.uid)}
@@ -166,10 +179,8 @@ func consumer(chains <-chan chain, config *config) {
 					fatal("%s", err)
 				}
 
-				if config.verbose {
-					fmt.Fprintf(os.Stderr, "key ID %X\n", keyA.KeyID())
-					fmt.Fprintf(os.Stderr, "key ID %X\n", keyB.KeyID())
-				}
+				log.Printf("key ID %X\n", keyA.KeyID())
+				log.Printf("key ID %X\n", keyB.KeyID())
 
 				os.Exit(0)
 			}
@@ -199,7 +210,9 @@ func netSeeder(seeds chan<- uint64, conn net.Conn) {
 		if _, err := r.Read(buf[:]); err != nil {
 			fatal("%s", err)
 		}
-		seeds <- binary.BigEndian.Uint64(buf[:])
+		seed := binary.BigEndian.Uint64(buf[:])
+		log.Printf("%#016x", seed)
+		seeds <- seed
 	}
 }
 
@@ -268,41 +281,102 @@ func workerListen(seeds <-chan uint64, chains chan<- chain,
 	}
 }
 
-// Find a long Key ID collision and print it to standard output.
-func collide(config *config) {
-	chains := make(chan chain)
-	seeds := make(chan uint64)
+type config struct {
+	cmd     int
+	addr    string
+	help    bool
+	public  bool
+	created int64
+	uid     string
+	verbose bool
+}
 
-	const (
-		cmdDefault = iota
-		cmdClient
-		cmdServer
-	)
-	cmd := cmdDefault
-	var addr string
+func parse() *config {
+	config := config{
+		cmd:     cmdDefault,
+		created: time.Now().Unix(),
+	}
 
 	options := []optparse.Option{
 		{"client", 'C', optparse.KindRequired},
 		{"server", 'S', optparse.KindRequired},
+		{"help", 'h', optparse.KindNone},
+		{"public", 'p', optparse.KindNone},
+		{"time", 't', optparse.KindRequired},
+		{"uid", 'u', optparse.KindRequired},
+		{"verbose", 'v', optparse.KindNone},
 	}
 
-	args := append([]string{""}, config.args...)
-	results, _, err := optparse.Parse(options, args)
+	results, rest, err := optparse.Parse(options, os.Args)
 	if err != nil {
-		fatal("-X: %s", err)
+		fatal("%s", err)
 	}
 	for _, result := range results {
 		switch result.Long {
 		case "client":
-			cmd = cmdClient
-			addr = result.Optarg
+			config.cmd = cmdClient
+			config.addr = result.Optarg
 		case "server":
-			cmd = cmdServer
-			addr = result.Optarg
+			config.cmd = cmdServer
+			config.addr = result.Optarg
+		case "help":
+			usage(os.Stdout)
+			os.Exit(0)
+		case "public":
+			config.public = true
+		case "time":
+			time, err := strconv.ParseUint(result.Optarg, 10, 32)
+			if err != nil {
+				fatal("--time (-t): %s", err)
+			}
+			config.created = int64(time)
+		case "uid":
+			config.uid = result.Optarg
+		case "verbose":
+			config.verbose = true
 		}
 	}
 
-	switch cmd {
+	if len(rest) > 0 {
+		fatal("too many arguments")
+	}
+
+	return &config
+}
+
+func usage(w io.Writer) {
+	bw := bufio.NewWriter(w)
+	p := "pgpcollider"
+	i := "  "
+	f := func(s ...interface{}) {
+		fmt.Fprintln(bw, s...)
+	}
+	f("Usage:")
+	f(i, p, "[-pv] [-t CREATED] [-u USERID]")
+	f(i, p, "-C HOSTNAME [-v]")
+	f(i, p, "-S BINDADDR [-pv] [-t CREATED] [-u USERID]")
+	f("Commands (distributed computation):")
+	f(i, "-C, --server BINDADDR  generate hash chains for a server")
+	f(i, "-S, --client HOSTNAME  listen for worker clients")
+	f("Options:")
+	f(i, "-h, --help             print this help message")
+	f(i, "-p, --public           only output the public key")
+	f(i, "-t, --time SECONDS     key creation date (unix epoch seconds)")
+	f(i, "-u, --uid USERID       user ID for the key")
+	f(i, "-v, --verbose          print additional information")
+	bw.Flush()
+}
+
+func main() {
+	chains := make(chan chain)
+	seeds := make(chan uint64)
+
+	config := parse()
+	if !config.verbose {
+		log.SetOutput(ioutil.Discard)
+	}
+
+	switch config.cmd {
 	case cmdDefault:
 		// Feed unique seeds one at a time to the workers.
 		go seeder(seeds)
@@ -310,7 +384,7 @@ func collide(config *config) {
 		startWorkers(seeds, chains, config.created)
 		consumer(chains, config)
 	case cmdClient:
-		conn, err := net.Dial("tcp", addr)
+		conn, err := net.Dial("tcp", config.addr)
 		if err != nil {
 			fatal("%s", err)
 		}
@@ -327,7 +401,7 @@ func collide(config *config) {
 	case cmdServer:
 		// Set up pipeline
 		go seeder(seeds)
-		go workerListen(seeds, chains, addr, config.created)
+		go workerListen(seeds, chains, config.addr, config.created)
 		consumer(chains, config)
 	}
 }
