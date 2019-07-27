@@ -35,6 +35,26 @@ Start one or more clients with `--client` (`-C`):
 
     $ pgpcollider -C hostname:1234
 
+### Options listing
+
+Use `--help` (`-h`) to get an option listing:
+
+```
+Usage:
+   pgpcollider [-pv] [-t CREATED] [-u USERID]
+   pgpcollider -C HOSTNAME [-v]
+   pgpcollider -S BINDADDR [-pv] [-t CREATED] [-u USERID]
+Commands (distributed computation):
+   -C, --server BINDADDR  generate hash chains for a server
+   -S, --client HOSTNAME  listen for worker clients
+Options:
+   -h, --help             print this help message
+   -p, --public           only output the public key
+   -t, --time SECONDS     key creation date (unix epoch seconds)
+   -u, --uid USERID       user ID for the keys
+   -v, --verbose          print progress information
+```
+
 ## See Also
 
 * [passphrase2pgp][p2p]

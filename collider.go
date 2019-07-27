@@ -362,8 +362,8 @@ func usage(w io.Writer) {
 	f(i, "-h, --help             print this help message")
 	f(i, "-p, --public           only output the public key")
 	f(i, "-t, --time SECONDS     key creation date (unix epoch seconds)")
-	f(i, "-u, --uid USERID       user ID for the key")
-	f(i, "-v, --verbose          print additional information")
+	f(i, "-u, --uid USERID       user ID for the keys")
+	f(i, "-v, --verbose          print progress information")
 	bw.Flush()
 }
 
