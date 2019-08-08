@@ -155,7 +155,7 @@ func consumer(chains <-chan chain, config *config) {
 					buf.Write(keyA.Packet())
 				}
 				buf.Write(userid.Packet())
-				buf.Write(keyA.Bind(&userid, config.created))
+				buf.Write(keyA.SelfSign(&userid, config.created, 0))
 				armor := openpgp.Armor(buf.Bytes())
 				if _, err := os.Stdout.Write(armor); err != nil {
 					fatal("%s", err)
@@ -173,7 +173,7 @@ func consumer(chains <-chan chain, config *config) {
 					buf.Write(keyB.Packet())
 				}
 				buf.Write(userid.Packet())
-				buf.Write(keyB.Bind(&userid, config.created))
+				buf.Write(keyB.SelfSign(&userid, config.created, 0))
 				armor = openpgp.Armor(buf.Bytes())
 				if _, err := os.Stdout.Write(armor); err != nil {
 					fatal("%s", err)
